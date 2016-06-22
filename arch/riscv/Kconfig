@@ -8,15 +8,22 @@ config RISCV
 	select ARCH_HAS_ATOMIC64_DEC_IF_POSITIVE
 	select ARCH_WANT_FRAME_POINTERS
 	select CLONE_BACKWARDS
+	select COMMON_CLK
 	select GENERIC_CLOCKEVENTS
 	select GENERIC_CPU_DEVICES
 	select GENERIC_IRQ_SHOW
+	select GENERIC_PCI_IOMAP
 	select GENERIC_STRNCPY_FROM_USER
 	select GENERIC_STRNLEN_USER
 	select GENERIC_SMP_IDLE_THREAD
 	select GENERIC_ATOMIC64 if !64BIT || !RV_ATOMIC
+	select ARCH_WANT_OPTIONAL_GPIOLIB
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP
+	select HAVE_DMA_API_DEBUG
+	select HAVE_DMA_CONTIGUOUS
+	select HAVE_GENERIC_DMA_COHERENT
+	select IRQ_DOMAIN
 	select NO_BOOTMEM
 	select RV_ATOMIC if SMP
 	select RV_SYSRISCV_ATOMIC if !RV_ATOMIC
@@ -27,7 +34,11 @@ config RISCV
 config MMU
 	def_bool y
 
-config NO_DMA
+# even on 32-bit, physical (and DMA) addresses are > 32-bits
+config ARCH_PHYS_ADDR_T_64BIT
+	def_bool y
+
+config ARCH_DMA_ADDR_T_64BIT
 	def_bool y
 
 config STACKTRACE_SUPPORT
