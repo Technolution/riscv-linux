@@ -25,32 +25,14 @@ static void riscv_software_interrupt(void)
 		return;
 #endif
 
-	BUG();
-}
-
-static void plic_interrupt(void)
-{
-	unsigned int cpu = smp_processor_id();
-	unsigned int irq = per_cpu(plic_context, cpu)->claim;
-
-	BUG_ON(per_cpu(irq_in_progress, cpu) != 0);
-
-	if (irq) {
-		per_cpu(irq_in_progress, cpu) = irq;
-		generic_handle_irq(irq);
-	}
-}
-
-static void ext_interrupt(void)
-{
-	irqreturn_t ret;
-	
 	ret = sbi_console_isr();
 	if (ret != IRQ_NONE)
 		return;
-		
+
 	BUG();
 }
+
+extern void plic_interrupt(void);
 
 asmlinkage void __irq_entry do_IRQ(unsigned int cause, struct pt_regs *regs)
 {
@@ -68,7 +50,7 @@ asmlinkage void __irq_entry do_IRQ(unsigned int cause, struct pt_regs *regs)
 			riscv_software_interrupt();
 			break;
 		case INTERRUPT_CAUSE_EXTERNAL:
-			ext_interrupt();
+			plic_interrupt();
 			break;
 		default:
 			BUG();
@@ -104,6 +86,6 @@ struct irq_chip plic_irq_chip = {
 
 void __init init_IRQ(void)
 {
-	/* Enable all interrupts */
-	csr_write(sie, SIE_SSIE | SIE_STIE | SIE_SEIE);
+	/* Enable software interrupts (and disable the others) */
+	csr_write(sie, SIE_SSIE);
 }
