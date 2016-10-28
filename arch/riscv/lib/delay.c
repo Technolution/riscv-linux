@@ -12,13 +12,19 @@ void __delay(unsigned long cycles)
 
 void udelay(unsigned long usecs)
 {
-	__delay((unsigned long)(((u64)usecs * timebase) / 1000000UL));
+    u64 dt = (u64)usecs * timebase;
+
+	__delay(do_div(dt, 1000000UL));
+	//__delay((unsigned long)(((u64)usecs * timebase) / 1000000UL));
 
 }
 EXPORT_SYMBOL(udelay);
 
 void ndelay(unsigned long nsecs)
 {
-	__delay((unsigned long)(((u64)nsecs * timebase) / 1000000000UL));
+    u64 dt = (u64)nsecs * timebase;
+
+	__delay(do_div(dt, 1000000000UL));
+//	__delay((unsigned long)(((u64)nsecs * timebase) / 1000000000UL));
 }
 EXPORT_SYMBOL(ndelay);

@@ -299,7 +299,7 @@ ENTRY(__switch_to)
 ENDPROC(__switch_to)
 
 ENTRY(__fstate_save)
-	li t1, SR_FS
+/*	li t1, SR_FS
 	csrs sstatus, t1
 	frcsr t0
 	fsd f0,  THREAD_F0(a0)
@@ -335,12 +335,12 @@ ENTRY(__fstate_save)
 	fsd f30, THREAD_F30(a0)
 	fsd f31, THREAD_F31(a0)
 	sw t0, THREAD_FCSR(a0)
-	csrc sstatus, t1
+	csrc sstatus, t1*/
 	ret
 ENDPROC(__fstate_save)
 
 ENTRY(__fstate_restore)
-	li t1, SR_FS
+/*	li t1, SR_FS
 	lw t0, THREAD_FCSR(a0)
 	csrs sstatus, t1
 	fld f0,  THREAD_F0(a0)
@@ -376,7 +376,7 @@ ENTRY(__fstate_restore)
 	fld f30, THREAD_F30(a0)
 	fld f31, THREAD_F31(a0)
 	fscsr t0
-	csrc sstatus, t1
+	csrc sstatus, t1*/
 	ret
 ENDPROC(__fstate_restore)
 

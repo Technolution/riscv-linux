@@ -76,9 +76,11 @@ void __init init_clockevent(void)
 
 void __init time_init(void)
 {
+	unsigned long long tb;
 	timebase = sbi_timebase();
-	lpj_fine = timebase;
-	do_div(lpj_fine, HZ);
+	tb = timebase;
+	do_div(tb, HZ);
+	lpj_fine = tb;
 
 	clocksource_register_hz(&riscv_clocksource, timebase);
 	init_clockevent();
