@@ -4,6 +4,7 @@
 # Then include just this.
 !arch/
 !.gitignore
+!.config
 !README.md
 
 # The arch/.gitignore and arch/riscv/.gitignore have patterns to un-ignore the
