@@ -5,7 +5,11 @@
 
 #define CLOCK_TICK_RATE (HZ * 100UL)
 
+#ifdef __riscv64
 typedef unsigned long cycles_t;
+#else
+typedef unsigned long long cycles_t;
+#endif
 
 static inline cycles_t get_cycles(void)
 {
