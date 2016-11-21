@@ -104,6 +104,6 @@ struct irq_chip plic_irq_chip = {
 
 void __init init_IRQ(void)
 {
-	/* Enable some interrupts (and disable the others) */
-	csr_write(sie, SIE_SSIE | SIE_SEIE);
+	/* Enable all interrupts */
+	csr_write(sie, SIE_SSIE | SIE_STIE | SIE_SEIE);
 }
