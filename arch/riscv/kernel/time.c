@@ -41,11 +41,7 @@ static struct clocksource riscv_clocksource = {
 	.name = "riscv_clocksource",
 	.rating = 300,
 	.read = riscv_rdtime,
-#ifdef CONFIG_64BITS
 	.mask = CLOCKSOURCE_MASK(64),
-#else
-	.mask = CLOCKSOURCE_MASK(32),
-#endif /* CONFIG_64BITS */
 	.flags = CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
