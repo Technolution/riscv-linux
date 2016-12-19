@@ -118,7 +118,8 @@ static const char *parse_u64_dec(const char *str, uint64_t *output)
 	uint64_t res = 0;
 	for (; *str; ++str) {
 		if (is_dec(*str)) {
-			if (((res * 10) / 10) != res) break;
+		    uint64_t res10 = res * 10;
+			if (do_div(res10, 10) != res) break;
 			res = (res * 10) + parse_dec(*str);
 		} else if (*str != '_') {
 			break;
