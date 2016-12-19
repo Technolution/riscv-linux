@@ -40,12 +40,13 @@ EXPORT_SYMBOL_GPL(plic_interrupt)
 static void plic_irq_mask(struct irq_data *d)
 {
 	/* mask PLIC via SBI */
-	/* once implemented, power-up PLIC with all interrupts masked */
+	sbi_mask_interrupt(d->irq);
 }
 
 static void plic_irq_unmask(struct irq_data *d)
 {
 	/* unmask PLIC via SBI */
+    sbi_unmask_interrupt(d->irq);
 }
 
 static struct irq_chip plic_irq_chip = {
@@ -78,7 +79,7 @@ static int plic_probe(struct platform_device *pdev)
 	for_each_cpu(hart, cpu_possible_mask) {
 		per_cpu(plic_context, hart) = 0;
 
-		sprintf(name, "%d.%d.s.ctl", 0, hart);
+		sprintf(name, "%d.%d.thres", 0, hart);
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
 		if (!res) {
 			dev_warn(&pdev->dev, "could not find PLIC for hart %d\n", hart);
