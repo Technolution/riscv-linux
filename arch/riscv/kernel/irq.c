@@ -25,10 +25,6 @@ static void riscv_software_interrupt(void)
 		return;
 #endif
 
-	ret = sbi_console_isr();
-	if (ret != IRQ_NONE)
-		return;
-
 	BUG();
 }
 

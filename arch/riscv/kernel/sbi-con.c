@@ -4,24 +4,39 @@
 #include <linux/tty_flip.h>
 #include <linux/tty_driver.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/platform_device.h>
 
 #include <asm/sbi.h>
 
-static DEFINE_SPINLOCK(sbi_tty_port_lock);
-static struct tty_port sbi_tty_port;
-static struct tty_driver *sbi_tty_driver;
+struct riscv_uart {
+    struct tty_driver* sbi_tty_driver;
+    struct tty_port sbi_tty_port;
+    struct console sbi_console;
+    spinlock_t sbi_tty_port_lock;
+    uint32_t __iomem *reg;
+    uint32_t irq;
+};
 
-irqreturn_t sbi_console_isr(void)
+/**
+ * sbi_console_isr - Interrupt Service Handler
+ * @irq: IRQ number
+ * @data: Uart port information
+ *
+ * Return: IRQ_HANDLED on success and IRQ_NONE on failure
+ */
+static irqreturn_t sbi_console_isr(int irq, void *data)
 {
+    struct riscv_uart *ru = (struct riscv_uart *)data;
 	int ch = sbi_console_getchar();
 	if (ch < 0)
 		return IRQ_NONE;
 
-	spin_lock(&sbi_tty_port_lock);
-	tty_insert_flip_char(&sbi_tty_port, ch, TTY_NORMAL);
-	tty_flip_buffer_push(&sbi_tty_port);
-	spin_unlock(&sbi_tty_port_lock);
+	spin_lock(&ru->sbi_tty_port_lock);
+	tty_insert_flip_char(&ru->sbi_tty_port, ch, TTY_NORMAL);
+	tty_flip_buffer_push(&ru->sbi_tty_port);
+	spin_unlock(&ru->sbi_tty_port_lock);
 
 	return IRQ_HANDLED;
 }
@@ -65,8 +80,9 @@ static void sbi_console_write(struct console *co, const char *buf, unsigned n)
 
 static struct tty_driver *sbi_console_device(struct console *co, int *index)
 {
+    struct riscv_uart *ru = (struct riscv_uart *)co->data;
 	*index = co->index;
-	return sbi_tty_driver;
+	return ru->sbi_tty_driver;
 }
 
 static int sbi_console_setup(struct console *co, char *options)
@@ -74,60 +90,118 @@ static int sbi_console_setup(struct console *co, char *options)
 	return co->index != 0 ? -ENODEV : 0;
 }
 
-static struct console sbi_console = {
-	.name	= "sbi_console",
-	.write	= sbi_console_write,
-	.device	= sbi_console_device,
-	.setup	= sbi_console_setup,
-	.flags	= CON_PRINTBUFFER,
-	.index	= -1
-};
-
-static int __init sbi_console_init(void)
+static int sbi_console_init(struct riscv_uart *ru)
 {
 	int ret;
 
-	register_console(&sbi_console);
+	strcpy(ru->sbi_console.name, "sbi_console");
+	ru->sbi_console.write = sbi_console_write;
+	ru->sbi_console.device = sbi_console_device;
+	ru->sbi_console.setup = sbi_console_setup;
+	ru->sbi_console.flags = CON_PRINTBUFFER;
+	ru->sbi_console.index = -1;
+	ru->sbi_console.data = (void*)ru;
+	register_console(&ru->sbi_console);
 
-	sbi_tty_driver = tty_alloc_driver(1,
+	ru->sbi_tty_driver = tty_alloc_driver(1,
 		TTY_DRIVER_REAL_RAW | TTY_DRIVER_DYNAMIC_DEV);
-	if (unlikely(IS_ERR(sbi_tty_driver)))
-		return PTR_ERR(sbi_tty_driver);
+	if (unlikely(IS_ERR(ru->sbi_tty_driver)))
+		return PTR_ERR(ru->sbi_tty_driver);
 
-	sbi_tty_driver->driver_name = "sbi";
-	sbi_tty_driver->name = "ttySBI";
-	sbi_tty_driver->major = TTY_MAJOR;
-	sbi_tty_driver->minor_start = 0;
-	sbi_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
-	sbi_tty_driver->subtype = SERIAL_TYPE_NORMAL;
-	sbi_tty_driver->init_termios = tty_std_termios;
-	tty_set_operations(sbi_tty_driver, &sbi_tty_ops);
+	ru->sbi_tty_driver->driver_name = "sbi";
+	ru->sbi_tty_driver->name = "ttySBI";
+	ru->sbi_tty_driver->major = TTY_MAJOR;
+	ru->sbi_tty_driver->minor_start = 0;
+	ru->sbi_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
+	ru->sbi_tty_driver->subtype = SERIAL_TYPE_NORMAL;
+	ru->sbi_tty_driver->init_termios = tty_std_termios;
+	tty_set_operations(ru->sbi_tty_driver, &sbi_tty_ops);
 
-	tty_port_init(&sbi_tty_port);
-	tty_port_link_device(&sbi_tty_port, sbi_tty_driver, 0);
+	tty_port_init(&ru->sbi_tty_port);
+	tty_port_link_device(&ru->sbi_tty_port, ru->sbi_tty_driver, 0);
 
-	ret = tty_register_driver(sbi_tty_driver);
+	ret = tty_register_driver(ru->sbi_tty_driver);
 	if (unlikely(ret))
 		goto out_tty_put;
-
-	/* Poll the console once, which will trigger future interrupts */
-	sbi_console_isr();
 
 	return ret;
 
 out_tty_put:
-	put_tty_driver(sbi_tty_driver);
+	put_tty_driver(ru->sbi_tty_driver);
 	return ret;
 }
 
-static void __exit sbi_console_exit(void)
+static void sbi_console_exit(struct riscv_uart *ru)
 {
-	tty_unregister_driver(sbi_tty_driver);
-	put_tty_driver(sbi_tty_driver);
+	tty_unregister_driver(ru->sbi_tty_driver);
+	put_tty_driver(ru->sbi_tty_driver);
 }
 
-module_init(sbi_console_init);
-module_exit(sbi_console_exit);
+static int sbi_probe(struct platform_device *pdev) {
+    struct riscv_uart *ru;
+    struct resource *res;
+    void *base;
+    uint32_t irq;
+    int ret;
+    int err;
+
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    base = devm_ioremap_resource(&pdev->dev, res);
+    if (IS_ERR(base)) {
+        dev_err(&pdev->dev, "Could not find uart memory space\n");
+        return PTR_ERR(base);
+    }
+
+    ru = devm_kzalloc(&pdev->dev, sizeof(*ru), GFP_KERNEL);
+    ru->sbi_tty_port_lock = __SPIN_LOCK_UNLOCKED(ru->sbi_tty_port_lock);
+    if (!ru)
+        return -ENOMEM;
+
+    res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+    if (res == NULL) {
+        dev_err(&pdev->dev, "Could not find uart irq\n");
+        return PTR_ERR(base);
+    }
+    irq = res->start;
+    err = devm_request_irq(&pdev->dev, irq, sbi_console_isr,
+                           IRQF_NO_THREAD,
+                           "sbi_console", ru);
+    if (err) {
+        dev_err(&pdev->dev, "Unable to request irq %d\n", irq);
+        return err;
+    }
+    ru->reg = base;
+
+    platform_set_drvdata(pdev, ru);
+    ret = sbi_console_init(ru);
+
+    if (ret == 0) {
+        dev_info(&pdev->dev, "loaded SBI uart\n");
+    } else {
+        dev_warn(&pdev->dev, "failed to add SBI uart (%d)\n", ret);
+    }
+    return ret;
+}
+
+static int sbi_remove(struct platform_device *pdev) {
+    struct riscv_uart *ru;
+
+    ru = platform_get_drvdata(pdev);
+    sbi_console_exit(ru);
+    // free not needed, handled by the devm framework
+
+    return 0;
+}
+
+static struct platform_driver sbi_driver = {
+    .probe      = sbi_probe,
+    .remove     = sbi_remove,
+    .driver     = {
+        .name   = "sbi",
+    },
+};
+
+module_platform_driver(sbi_driver);
 
 MODULE_DESCRIPTION("RISC-V SBI console driver");
 MODULE_LICENSE("GPL");
