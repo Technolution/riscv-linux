@@ -163,13 +163,6 @@ static int sbi_probe(struct platform_device *pdev) {
         return PTR_ERR(base);
     }
     irq = res->start;
-    err = devm_request_irq(&pdev->dev, irq, sbi_console_isr,
-                           IRQF_NO_THREAD,
-                           "sbi_console", ru);
-    if (err) {
-        dev_err(&pdev->dev, "Unable to request irq %d\n", irq);
-        return err;
-    }
     ru->reg = base;
 
     platform_set_drvdata(pdev, ru);
@@ -180,6 +173,16 @@ static int sbi_probe(struct platform_device *pdev) {
     } else {
         dev_warn(&pdev->dev, "failed to add SBI uart (%d)\n", ret);
     }
+
+    // only when completely initialized, request the IRQ
+    err = devm_request_irq(&pdev->dev, irq, sbi_console_isr,
+                               IRQF_NO_THREAD,
+                               "sbi_console", ru);
+    if (err) {
+        dev_err(&pdev->dev, "Unable to request irq %d\n", irq);
+        return err;
+    }
+
     return ret;
 }
 
