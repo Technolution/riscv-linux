@@ -21,3 +21,13 @@ config PLIC
 	   interrupt sources (MSI, GPIO, etc) are subordinate to the PLIC.
 
 	   If you don't know what to do here, say Y.
+
+config RISCV_UART
+    bool "RISC-V UART controller"
+    depends on CONFIG_STRING
+    default y
+    help
+       This enables support for the UART chip found in standard RISC-V
+       systems.
+
+       If you don't know what to do here, say Y.
