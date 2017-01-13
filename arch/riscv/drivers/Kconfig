@@ -31,3 +31,13 @@ config RISCV_UART
        systems.
 
        If you don't know what to do here, say Y.
+
+
+config FRENOX_ETH
+    bool "Frenox Ethernet controller"
+    depends on CONFIG_STRING
+    default y
+    help
+       This enables support for the Frenox Eterhet controller.
+
+       If you don't know what to do here, say N.
