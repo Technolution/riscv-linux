@@ -41,3 +41,13 @@ config FRENOX_ETH
        This enables support for the Frenox Eterhet controller.
 
        If you don't know what to do here, say N.
+
+
+config FRENOX_FLASH
+    bool "Frenox Flash controller"
+    depends on CONFIG_STRING
+    default y
+    help
+       This enables support for the Frenox Flash IOCTRL interface.
+
+       If you don't know what to do here, say N.
