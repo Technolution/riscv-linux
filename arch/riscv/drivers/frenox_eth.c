@@ -22,7 +22,7 @@
 #include <linux/moduleparam.h>
 #include <linux/rtnetlink.h>
 #include <net/rtnetlink.h>
-#include <linux/u64_stats_sync.h>
+//#include <linux/u64_stats_sync.h>
 
 #include "frenox_eth.h"
 
@@ -35,19 +35,11 @@
 
 #undef USE_TX_ISR
 
-struct pcpu_dstats {
-        u64                     tx_packets;
-        u64                     tx_bytes;
-        struct u64_stats_sync   syncp;
-};
-
 struct frenox_priv {
-    struct net_device_stats stats;
     struct sk_buff *skb;
     volatile uint32_t __iomem *reg;
     int rx_irq;
     int tx_irq;
-    spinlock_t lock;
 };
     
 
@@ -68,18 +60,18 @@ static irqreturn_t frenox_eth_rx_isr(int irq, void *data)
     int packet_len; // TODO: Ensure it can't overflow (in VHDL?)
     int packet_available;
     
+    
     priv = netdev_priv(dev);
+    
     buf = ((uint8_t *)priv->reg) + FRENOX_ETH_MAPPING_RX_BUFFER_OFFSET;
     
     if (unlikely(dev == NULL)) {
         printk(KERN_WARNING "frenox_eth_rx_isr: ISR called but device not initialized!\n");
         return IRQ_NONE;
     }
-    spin_lock(&priv->lock);
     packet_available = priv->reg[FRENOX_ETH_MAPPING_CONTROL_RX_NEW_PKT_ADDRESS/4];
     if (packet_available == 0) {
         printk(KERN_WARNING "frenox_eth_rx_isr: ISR called but no packet available!\n");
-        spin_unlock(&priv->lock);
         return IRQ_NONE;
     } 
     
@@ -88,18 +80,16 @@ static irqreturn_t frenox_eth_rx_isr(int irq, void *data)
     if (!skb) {
         dev->stats.rx_dropped++;
         printk(KERN_ERR "frenox_eth_rx_isr: no memory available for packet!\n");
-        spin_unlock(&priv->lock);
         return IRQ_RETVAL(1);
     }
     
     skb_reserve(skb, NET_IP_ALIGN);
     
-    memcpy(skb->data, buf, packet_len);
+    memcpy_fromio(skb->data, buf, packet_len);
     //skb_copy_to_linear_data(skb, buf, packet_len);
     skb_put(skb, packet_len);
 
     skb->protocol = eth_type_trans(skb, dev);
-    skb_checksum_none_assert(skb);
 
     dev->stats.rx_packets++;
     dev->stats.rx_bytes += packet_len;
@@ -107,7 +97,6 @@ static irqreturn_t frenox_eth_rx_isr(int irq, void *data)
     netif_rx(skb);
     
     priv->reg[FRENOX_ETH_MAPPING_CONTROL_RX_ACK_PKT_ADDRESS/4] = 1;
-    spin_unlock(&priv->lock);
     
     return IRQ_HANDLED;
 
@@ -117,16 +106,14 @@ static irqreturn_t frenox_eth_rx_isr(int irq, void *data)
 static irqreturn_t frenox_eth_tx_isr(int irq, void *data)
 {
     struct net_device *dev = (struct net_device *)data;
-    volatile uint32_t __iomem *reg;
     struct frenox_priv *priv;
+    uint32_t done;
     
     priv = netdev_priv(dev);
     
-    spin_lock(&priv->lock);
-    uint32_t done = priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_DONE_ADDRESS/4];
+    done = priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_DONE_ADDRESS/4];
     // Clear interrupt anyway.
     priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_DONE_ADDRESS/4] = 1;
-    spin_unlock(&priv->lock);
     netif_wake_queue(dev);
     
     if(done == 0) {
@@ -154,12 +141,10 @@ static int frenox_mdio_write(struct net_device *dev, uint32_t address, uint32_t 
 
 
     /* Wait until previous operation is done. */
-    spin_lock(&priv->lock);
     while(mdio[1] & (1<<16));
     // Load data 
     mdio[3] = (command << 16) | (data & 0xFFFF);
     while(mdio[1] & (1<<16));
-    spin_unlock(&priv->lock);
     return 0;
 }
   
@@ -176,10 +161,9 @@ static int frenox_mdio_read(struct net_device *dev, uint32_t address, uint32_t *
     
     priv = netdev_priv(dev);
     mdio = priv->reg + FRENOX_ETH_MAPPING_MDIO_OFFSET/4;
-  
+    
     command = (PHY_TURNAROUND << 14) | (address << 9) | (PHY_ADDR << 4) | PHY_READCMD;
   
-    spin_lock(&priv->lock);
     /* Wait until previous operation is done. */
     while(mdio[1] & (1<<16));
     
@@ -191,7 +175,6 @@ static int frenox_mdio_read(struct net_device *dev, uint32_t address, uint32_t *
     while(mdio[1] & (1<<16));
     
     *data = mdio[1] & 0xFFFF;
-    spin_unlock(&priv->lock);
     
     return 0;
 }
@@ -199,20 +182,20 @@ static int frenox_mdio_read(struct net_device *dev, uint32_t address, uint32_t *
 static netdev_tx_t frenox_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
     struct frenox_priv *priv;
-    size_t curr_word;
+    unsigned int cpu;
 
     priv = netdev_priv(dev);
+    cpu = smp_processor_id();
     // We can only transmit one packet concurrently. Immediately stop the queue.
     // If we stop the queue later, it is possible that the ISR is already expired.
     
-    spin_lock(&priv->lock);
 #ifndef USE_TX_ISR
     while(priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_BUSY_ADDRESS/4]);
 #endif
     
     if(priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_BUSY_ADDRESS/4]) {
         printk(KERN_WARNING "Frenox_eth busy while xmit called again\n");
-        spin_unlock(&priv->lock);
+        dev->stats.tx_dropped++;
         return NETDEV_TX_BUSY;
     }
 #ifdef USE_TX_ISR
@@ -220,17 +203,85 @@ static netdev_tx_t frenox_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
     
     //printk("Transmitting %d bytes to %02X:%02X:%02X:%02X:%02X:%02X\n", skb->len, (int)skb->data[0], (int)skb->data[1], (int)skb->data[2], int)skb->data[3], (int)skb->data[4], (int)skb->data[5]);
-    memcpy(priv->reg + FRENOX_ETH_MAPPING_TX_BUFFER_OFFSET/4, skb->data, skb->len);
+    memcpy_toio(priv->reg + FRENOX_ETH_MAPPING_TX_BUFFER_OFFSET/4, skb->data, skb->len);
     priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_LEN_ADDRESS/4] = skb->len;
     priv->reg[FRENOX_ETH_MAPPING_CONTROL_TX_SEND_NOW_ADDRESS/4] = 1;
-    spin_unlock(&priv->lock);
 
+    dev->stats.tx_packets++;
+    dev->stats.tx_bytes += skb->len;
+    
     dev_kfree_skb(skb);
-
     
     return NETDEV_TX_OK;
 }
 
+/**
+ * frenox_set_mac_address_bytes - Write the MAC address
+ * @ndev:	Pointer to the net_device structure
+ * @address:	6 byte Address to be written as MAC address
+ *
+ * This function is called to initialize the MAC address of the Axi Ethernet
+ * core. It writes to the UAW0 and UAW1 registers of the core.
+ */
+static void frenox_set_mac_address_bytes(struct net_device *dev, void *address)
+{
+    struct frenox_priv *priv;
+    
+    priv = netdev_priv(dev);
+
+    if (address)
+        memcpy(dev->dev_addr, address, ETH_ALEN);
+    if (!is_valid_ether_addr(dev->dev_addr))
+        eth_random_addr(dev->dev_addr);
+
+    /* Set up unicast MAC address filter set its mac address */
+    priv->reg[FRENOX_ETH_MAPPING_CONTROL_MY_MAC_LO_ADDRESS/4] = (
+            (dev->dev_addr[5]) |
+            (dev->dev_addr[4] << 8) |
+            (dev->dev_addr[3] << 16) |
+            (dev->dev_addr[2] << 24));
+    priv->reg[FRENOX_ETH_MAPPING_CONTROL_MY_MAC_HI_ADDRESS/4] = (
+             (dev->dev_addr[1]) |
+             (dev->dev_addr[0] << 8));
+}
+/**
+ * frenox_set_mac_address - Write the MAC address (from outside the driver)
+ * @dev:    Pointer to the net_device structure
+ * @p:      6 byte Address to be written as MAC address
+ *
+ * Return: 0 for all conditions. Presently, there is no failure case.
+ *
+ * This function is called to initialize the MAC address of the Axi Ethernet
+ * core. It calls the core specific axienet_set_mac_address. This is the
+ * function that goes into net_device_ops structure entry ndo_set_mac_address.
+ */
+static int frenox_set_mac_address(struct net_device *dev, void *p)
+{
+    struct sockaddr *addr = p;
+    frenox_set_mac_address_bytes(dev, addr->sa_data);
+    return 0;
+}
+
+/**
+ * frenox_eth_stats - Get statistics.
+ * @dev:    Pointer to the net_device structure
+ * @p:      6 byte Address to be written as MAC address
+ *
+ * Return:  The device statistics
+ *
+ * This function is called to collect statistics from CPUs and 
+ * from the HW error counter.
+ */
+struct net_device_stats *frenox_eth_stats(struct net_device *dev)
+{
+    struct frenox_priv *priv;
+    
+    priv = netdev_priv(dev);
+    
+    dev->stats.rx_errors = priv->reg[FRENOX_ETH_MAPPING_CONTROL_RX_BAD_PKT_ADDRESS/4];
+    
+    return &dev->stats;
+}
 static int frenox_eth_dev_init(struct net_device *dev)
 {
     return 0;
@@ -238,7 +289,7 @@ static int frenox_eth_dev_init(struct net_device *dev)
 
 static void frenox_eth_dev_uninit(struct net_device *dev)
 {
-    free_percpu(dev->dstats);
+    return;
 }
 
 
@@ -246,7 +297,8 @@ static const struct net_device_ops frenox_eth_netdev_ops = {
     .ndo_init               = frenox_eth_dev_init,
     .ndo_uninit             = frenox_eth_dev_uninit,
     .ndo_start_xmit         = frenox_eth_xmit,
-    .ndo_set_mac_address    = eth_mac_addr,
+    .ndo_set_mac_address    = frenox_set_mac_address,
+    .ndo_get_stats          = frenox_eth_stats
 };
 
 static void frenox_eth_get_drvinfo(struct net_device *dev,
@@ -293,7 +345,6 @@ static struct rtnl_link_ops frenox_eth_link_ops __read_mostly = {
         .validate       = frenox_eth_validate,
 };
 
-
 static int frenox_eth_init(struct net_device *dev)
 {
     int err;
@@ -334,6 +385,9 @@ static int frenox_eth_init(struct net_device *dev)
     return err;
 }   
 
+
+
+
 static void frenox_eth_exit(struct net_device *dev)
 {
 }
@@ -345,8 +399,6 @@ static int frenox_eth_probe(struct platform_device *pdev) {
     void *base;
     int ret;
     int err;
-    int irq_last;
-
 
     dev = alloc_netdev(sizeof(struct frenox_priv), "frenox_eth%d", NET_NAME_UNKNOWN, frenox_eth_setup);
     if (!dev) {
@@ -354,7 +406,6 @@ static int frenox_eth_probe(struct platform_device *pdev) {
     }
     priv = netdev_priv(dev);
     memset(priv, 0, sizeof(struct frenox_priv));
-    spin_lock_init(&priv->lock);
     
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
     base = devm_ioremap_resource(&pdev->dev, res);

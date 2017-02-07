@@ -45,6 +45,8 @@
 #define FRENOX_ETH_CONTROL_REGS_TX_LEN_SIZE                                              0x00000004
 #define FRENOX_ETH_CONTROL_REGS_TX_LEN_COUNT                                             0x00000001
 #define FRENOX_ETH_CONTROL_REGS_TX_DONE_OFFSET                                           0x00000010
+#define FRENOX_ETH_CONTROL_REGS_TX_DONE_SIZE                                             0x00000004
+#define FRENOX_ETH_CONTROL_REGS_TX_DONE_COUNT                                            0x00000001
 #define FRENOX_ETH_CONTROL_REGS_RX_ACK_PKT_OFFSET                                        0x00000020
 #define FRENOX_ETH_CONTROL_REGS_RX_ACK_PKT_SIZE                                          0x00000004
 #define FRENOX_ETH_CONTROL_REGS_RX_ACK_PKT_COUNT                                         0x00000001
@@ -57,6 +59,9 @@
 #define FRENOX_ETH_CONTROL_REGS_RX_LEN_OFFSET                                            0x0000002C
 #define FRENOX_ETH_CONTROL_REGS_RX_LEN_SIZE                                              0x00000004
 #define FRENOX_ETH_CONTROL_REGS_RX_LEN_COUNT                                             0x00000001
+#define FRENOX_ETH_CONTROL_REGS_RX_BAD_PKT_OFFSET                                        0x00000030
+#define FRENOX_ETH_CONTROL_REGS_RX_BAD_PKT_SIZE                                          0x00000004
+#define FRENOX_ETH_CONTROL_REGS_RX_BAD_PKT_COUNT                                         0x00000001
 #define FRENOX_ETH_CONTROL_REGS_PROMISCUOUS_OFFSET                                       0x00000040
 #define FRENOX_ETH_CONTROL_REGS_PROMISCUOUS_SIZE                                         0x00000004
 #define FRENOX_ETH_CONTROL_REGS_PROMISCUOUS_COUNT                                        0x00000001
@@ -112,11 +117,12 @@
 #define FRENOX_ETH_MAPPING_CONTROL_RX_NEW_PKT_ADDRESS                                    (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_RX_NEW_PKT_OFFSET)
 #define FRENOX_ETH_MAPPING_CONTROL_RX_START_ADDR_ADDRESS                                 (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_RX_START_ADDR_OFFSET)
 #define FRENOX_ETH_MAPPING_CONTROL_RX_LEN_ADDRESS                                        (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_RX_LEN_OFFSET)
+#define FRENOX_ETH_MAPPING_CONTROL_RX_BAD_PKT_ADDRESS                                    (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_RX_BAD_PKT_OFFSET)
 #define FRENOX_ETH_MAPPING_CONTROL_PROMISCUOUS_ADDRESS                                   (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_PROMISCUOUS_OFFSET)
 #define FRENOX_ETH_MAPPING_CONTROL_MY_MAC_LO_ADDRESS                                     (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_MY_MAC_LO_OFFSET)
 #define FRENOX_ETH_MAPPING_CONTROL_MY_MAC_HI_ADDRESS                                     (FRENOX_ETH_MAPPING_CONTROL_BASE + FRENOX_ETH_CONTROL_REGS_MY_MAC_HI_OFFSET)
 #define FRENOX_ETH_MAPPING_MDIO_BASE                                                     (FRENOX_ETH_MAPPING_BASE + FRENOX_ETH_MAPPING_MDIO_OFFSET)
-#define FRENOX_ETH_MAPPING_MDIO_SIZE                                                     0x00000020
+#define FRENOX_ETH_MAPPING_MDIO_SIZE                                                     0x00000080
 #define FRENOX_ETH_MAPPING_MDIO_COUNT                                                    1
 
 typedef struct _frenox_eth_control_regs_t {
@@ -124,12 +130,14 @@ typedef struct _frenox_eth_control_regs_t {
     uint32_t tx_busy;
     uint32_t tx_start_addr;
     uint32_t tx_len;
-    uint32_t padding1[4];
+    uint32_t tx_done;
+    uint32_t padding1[3];
     uint32_t rx_ack_pkt;
     uint32_t rx_new_pkt;
     uint32_t rx_start_addr;
     uint32_t rx_len;
-    uint32_t padding2[4];
+    uint32_t rx_bad_pkt;
+    uint32_t padding2[3];
     uint32_t promiscuous;
     uint32_t my_mac_lo;
     uint32_t my_mac_hi;
