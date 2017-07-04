@@ -18,9 +18,9 @@
 #define SZREG		__REG_SEL(8, 4)
 #define LGREG		__REG_SEL(3, 2)
 
-#if (_RISCV_SZPTR == 64)
+#if (__INTPTR_WIDTH__ == 64)
 #define __PTR_SEL(a,b)	__ASM_STR(a)
-#elif (_RISCV_SZPTR == 32)
+#elif (__INTPTR_WIDTH__ == 32)
 #define __PTR_SEL(a,b)	__ASM_STR(b)
 #else
 #error "Unexpected _RISCV_SZPTR"

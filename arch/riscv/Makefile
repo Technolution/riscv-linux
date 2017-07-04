@@ -30,13 +30,13 @@ endif
 export BITS
 ifeq ($(CONFIG_64BIT),y)
 	BITS := 64
-	KBUILD_CFLAGS += -m64
-	KBUILD_AFLAGS += -m64
+	KBUILD_CFLAGS +=
+	KBUILD_AFLAGS +=
 	LDFLAGS += -melf64lriscv
 else
 	BITS := 32
-	KBUILD_CFLAGS += -m32
-	KBUILD_AFLAGS += -m32
+	KBUILD_CFLAGS +=
+	KBUILD_AFLAGS +=
 	LDFLAGS += -melf32lriscv
 endif
 
@@ -45,8 +45,8 @@ KBUILD_CFLAGS += -mno-atomic
 endif
 
 KBUILD_CFLAGS += -Wall
-KBUILD_CFLAGS += -msoft-float -march=RV32IMA
-KBUILD_AFLAGS += -msoft-float -march=RV32IMA
+KBUILD_CFLAGS += -march=rv32ima
+KBUILD_AFLAGS += -march=rv32ima
 
 ifeq ($(CONFIG_RVC),y)
 	KBUILD_CFLAGS += -mrvc
